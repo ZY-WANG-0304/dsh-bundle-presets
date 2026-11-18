@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Bundle presets",
+    "description": "Adds a Presets tab to the Plugins page: save the current bundle set, preview the difference, switch in one click, undo the last switch.",
+    "detail": "docs/DETAIL.md"
+  }
+}

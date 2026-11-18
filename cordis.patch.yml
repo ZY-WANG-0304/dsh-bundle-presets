@@ -1,0 +1,6 @@
+# Bundle layer for dsh-bundle-presets: one Host row that serves the preset
+# routes and the bundle page card that drives it.
+- insert:
+    - id: bundle-presets
+      name: 'dsh-bundle-presets'
+      config: {}

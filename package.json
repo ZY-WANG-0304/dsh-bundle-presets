@@ -1,0 +1,62 @@
+{
+  "name": "dsh-bundle-presets",
+  "version": "0.1.0",
+  "description": "Named bundle-set presets for DeepSeek Harness: save the active bundle list, edit a set with native switches, apply it in one click, undo the last switch. 组合预设：保存、编辑、套用与撤销 bundle 组合。",
+  "type": "module",
+  "license": "MIT",
+  "author": "ZY-WANG-0304 <ziyang01.wang@xg.auto>",
+  "homepage": "https://github.com/ZY-WANG-0304/dsh-bundle-presets#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZY-WANG-0304/dsh-bundle-presets.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ZY-WANG-0304/dsh-bundle-presets/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "bundle",
+    "preset",
+    "profile"
+  ],
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.1"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "plan.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node tests/plan.test.mjs && node tests/routes.test.mjs"
+  }
+}
