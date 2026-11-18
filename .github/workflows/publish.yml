@@ -1,0 +1,50 @@
+# Publishes the package to npm over OIDC trusted publishing: no npm token is
+# stored in this repository. npm only lets a trusted publisher be configured for
+# a package that already exists, so 0.1.0 itself was bootstrapped with a staged
+# publish approved in the browser; every later version goes through this file.
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Test
+        run: npm test
+
+      # A tag that points at an already published version must not fail the
+      # run: the first release was bootstrapped outside CI.
+      - name: Skip an already published version
+        id: check
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "dsh-bundle-presets@${version}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "dsh-bundle-presets@${version} is already on npm; skipping"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.check.outputs.published == 'false'
+        run: npm publish --provenance --access public
