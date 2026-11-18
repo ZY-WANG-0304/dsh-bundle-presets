@@ -2,6 +2,11 @@
 
 Named bundle-set presets for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Save the bundle list a profile is running as a named set, edit that set with the same switches the plugin list uses, apply it in one click, and undo the last switch.
 
+[![npm](https://img.shields.io/npm/v/dsh-bundle-presets)](https://www.npmjs.com/package/dsh-bundle-presets)
+[![license](https://img.shields.io/npm/l/dsh-bundle-presets)](LICENSE)
+[![publish](https://github.com/ZY-WANG-0304/dsh-bundle-presets/actions/workflows/publish.yml/badge.svg)](https://github.com/ZY-WANG-0304/dsh-bundle-presets/actions/workflows/publish.yml)
+
+
 中文说明见 [README.zh.md](README.zh.md)。
 
 ## What it does

@@ -2,6 +2,11 @@
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的命名 bundle 组合：把当前 profile 正在跑的 bundle 列表存成一套预设，用和原生插件列表一样的开关就地编辑，一键套用，也可以撤销上一次切换。
 
+[![npm](https://img.shields.io/npm/v/dsh-bundle-presets)](https://www.npmjs.com/package/dsh-bundle-presets)
+[![license](https://img.shields.io/npm/l/dsh-bundle-presets)](LICENSE)
+[![publish](https://github.com/ZY-WANG-0304/dsh-bundle-presets/actions/workflows/publish.yml/badge.svg)](https://github.com/ZY-WANG-0304/dsh-bundle-presets/actions/workflows/publish.yml)
+
+
 English: [README.md](README.md)
 
 ## 它做什么
