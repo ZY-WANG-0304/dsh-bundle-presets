@@ -1,6 +1,6 @@
 {
   "name": "dsh-bundle-presets",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Named bundle-set presets for DeepSeek Harness: save the active bundle list, edit a set with native switches, apply it in one click, undo the last switch. 组合预设：保存、编辑、套用与撤销 bundle 组合。",
   "type": "module",
   "license": "MIT",
