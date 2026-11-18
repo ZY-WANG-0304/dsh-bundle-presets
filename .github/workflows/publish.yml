@@ -50,4 +50,4 @@ jobs:
       # then does the version go live.
       - name: Stage the release
         if: steps.check.outputs.published == 'false'
-        run: npm stage publish --access public
+        run: npm stage publish --provenance --access public
