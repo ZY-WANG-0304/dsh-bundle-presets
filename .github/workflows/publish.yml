@@ -45,6 +45,9 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish
+      # The trusted publisher is configured for `npm stage publish`: CI stages
+      # the tarball, a maintainer approves it in the browser with 2FA, and only
+      # then does the version go live.
+      - name: Stage the release
         if: steps.check.outputs.published == 'false'
-        run: npm publish --provenance --access public
+        run: npm stage publish --access public
