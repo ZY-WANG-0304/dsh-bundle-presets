@@ -9,6 +9,10 @@ Named bundle-set presets for [DeepSeek Harness](https://github.com/deepseek-ai/d
 
 中文说明见 [README.zh.md](README.zh.md)。
 
+## Screenshot
+
+![The Presets tab: the current bundle set, saved presets, and the editor with native switches](docs/presets.png)
+
 ## What it does
 
 A **preset** is a named list of bundle package names from `dsh.profile.bundles`. The plugin adds a **Presets** tab to the Plugins page where you can:

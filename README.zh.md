@@ -9,6 +9,10 @@
 
 English: [README.md](README.md)
 
+## 截图
+
+![组合预设标签页：当前组合、已保存的预设，以及用原生开关编辑的编辑器](docs/presets.png)
+
 ## 它做什么
 
 一套**预设**就是一组 bundle 包名（对应 `dsh.profile.bundles`）。插件在 Plugins 页新增 **组合预设** 标签：
