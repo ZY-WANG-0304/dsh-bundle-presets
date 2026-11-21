@@ -1,4 +1,4 @@
-# dsh-bundle-presets · 组合预设
+# dsh-bundle-presets · 插件组合预设
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的命名 bundle 组合：把当前 profile 正在跑的 bundle 列表存成一套预设，用和原生插件列表一样的开关就地编辑，一键套用，也可以撤销上一次切换。
 
@@ -11,7 +11,7 @@ English: [README.md](README.md)
 
 ## 截图
 
-![组合预设标签页：当前组合、已保存的预设，以及用原生开关编辑的编辑器](docs/presets.png)
+![插件组合预设标签页：当前组合、已保存的预设，以及用原生开关编辑的编辑器](docs/presets.png)
 
 ## 它做什么
 
@@ -23,6 +23,8 @@ English: [README.md](README.md)
 - **套用**：先开后关，避免界面在切换途中掉掉。
 - **撤销上次切换**：只有 manifest 真的变了才写快照。
 - **同名保存要先确认**：先返回 `409 name-exists`，确认后才覆盖。
+
+侧栏底部还有一行**插件组合预设**（在「设置」上方）：悬停即展开右侧浮出菜单，列出所有预设并标出当前这套，点一下直接切换，菜单底部还有「撤销上次切换」和「管理预设…」——后者会打开 Plugins 页并选中其中的 **组合预设** 标签；点击该行可把菜单钉住，`Esc` 关闭并回到该行。
 
 切换走 `pluginManager.setBundleEnabled()`，因此继承了 profile 写锁、版本兼容性检查、HMR 重组，以及插件管理器对受保护 bundle 的拒绝。只要有一步做不成（文件缺失、patch 读不出来、要关受保护 bundle），整单拒绝并返回 `409 unappliable` 与逐项原因，**零写入**；某一步已写盘但重组失败时会立刻反向恢复。
 

@@ -188,7 +188,7 @@ export function apply(ctx) {
     try {
       raw = await readFile(statePath, 'utf8')
     } catch (error) {
-      if (error?.code === 'ENOENT') return { presets: [], last: null }
+      if (error?.code === 'ENOENT') return { presets: [], last: null, applied: null }
       throw error
     }
     try {
@@ -196,7 +196,13 @@ export function apply(ctx) {
       const presets = Array.isArray(parsed?.presets)
         ? parsed.presets.map(sanitizePreset).filter(Boolean)
         : []
-      return { presets, last: sanitizePreset(parsed?.last) ?? null }
+      const last = sanitizePreset(parsed?.last) ?? null
+      // Older files only recorded the undo snapshot; its name is `before <preset>`,
+      // which is enough to know what was applied last.
+      const applied = typeof parsed?.applied === 'string'
+        ? parsed.applied
+        : last !== null && last.name.startsWith('before ') ? last.name.slice('before '.length) : null
+      return { presets, last, applied }
     } catch {
       // A half-written or hand-edited file must not brick the page: keep the
       // damaged copy and start from an empty set.
@@ -207,7 +213,7 @@ export function apply(ctx) {
       } catch {
         recoveredPath = null
       }
-      return { presets: [], last: null }
+      return { presets: [], last: null, applied: null }
     }
   }
 
@@ -263,6 +269,7 @@ export function apply(ctx) {
       selected,
       presets: state.presets,
       last: state.last,
+      applied: state.applied ?? null,
       bundles: bundles.map(bundle => ({
         name: bundle.name,
         enabled: bundle.enabled,
@@ -505,14 +512,16 @@ export function apply(ctx) {
       if (result.blocked.length > 0) {
         return { error: 'unappliable', blocked: result.blocked, plan: result.plan }
       }
-      // Snapshot whenever the manifest actually moved, not only on success:
-      // a partial switch still needs a way back.
-      if (result.steps.some(step => step.changed)) {
-        await mutateLocked(state => {
-          state.last = { name: `before ${name}`, bundles: before, note: '', savedAt: new Date().toISOString() }
-          return { result: null }
-        })
-      }
+      // Record which preset this selection came from, so the switcher can name it
+      // even when two presets reduce to the same applicable bundles. The undo
+      // snapshot is written only when the manifest actually moved: a partial
+      // switch still needs a way back.
+      const changed = result.steps.some(step => step.changed)
+      await mutateLocked(state => {
+        state.applied = name
+        if (changed) state.last = { name: `before ${name}`, bundles: before, note: '', savedAt: new Date().toISOString() }
+        return { result: null }
+      })
       return { applied: name, ...result }
     })
     reply(res, 200, outcome)
@@ -532,6 +541,8 @@ export function apply(ctx) {
       if (result.steps.some(step => step.changed)) {
         await mutateLocked(state => {
           state.last = { name: 'redo', bundles: before, note: '', savedAt: new Date().toISOString() }
+          // The running selection no longer came from a preset name.
+          delete state.applied
           return { result: null }
         })
       }
