@@ -1,7 +1,7 @@
 {
   "meta": {
-    "title": "组合预设",
-    "description": "在 Plugins 页新增「组合预设」标签页：保存当前 bundle 组合、检查差异、一键套用与撤销。",
+    "title": "插件组合预设",
+    "description": "在 Plugins 页新增「插件组合预设」标签页：保存当前 bundle 组合、检查差异、一键套用与撤销。",
     "detail": "docs/DETAIL.md"
   }
 }

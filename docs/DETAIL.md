@@ -1,4 +1,4 @@
-# 组合预设 / Bundle presets
+# 插件组合预设 / Bundle presets
 
 把「当前 profile 里哪些 bundle 被选中」当成一套可以命名的组合存下来，随时一键换回来。
 
@@ -8,6 +8,17 @@
 - **套用**：算出「要开 / 要关」的差集，**先预检再动手**（要开的必须已装且能读、要关的不能是受保护 bundle），有任意一项做不成就整单拒绝（HTTP 409，零写入）；能做成时逐个调用插件管理器的 `setBundleEnabled`，开启在前、关闭在后。某一步即使写盘成功但重组失败，会立刻反向恢复那一步。
 - **撤销**：只有真正发生变化的套用才会写 `last`（空操作不会覆盖它）；撤销成功后再把 `last` 指向刚离开的组合，所以可以来回切。
 - **受保护 bundle 关不掉**：`dsh-base`、`dsh-web-app` 这类含受保护行的 bundle 由插件管理器拒绝关闭，预设套用不会把界面关死。
+
+## 侧栏快速切换
+
+侧栏底部（设置上方）注册了一行 **插件组合预设**（`sidebar.footer.action`，order 20）。它只消费 `{ wide }`：
+
+- 悬停约 140ms 展开右侧浮出菜单，指针离开该行与菜单约 280ms 后关闭；触屏/粗指针不触发悬停，只能点击。
+- 菜单按 `/state` 的 `presets` 列表渲染，当前这套用集合相等判定并打勾；每行尾部显示 bundle 数，套用中显示转圈。
+- 菜单底部固定两行：**撤销上次切换**（无 `last` 时禁用）、**管理预设…**（跳到 Plugins 页并选中 **组合预设** 标签；标签选择属于那个页面自己，只能先 `pluginNavigation.openList()` 再点它渲染出来的标签按钮）。
+- 横向几何与侧栏原生行（`dsh-client-ui-sidebar` 的 `.panelRow`）在展开态一致：280px 侧栏下，行盒 `8→272`、3px 透明 inset 边框让悬停底板落在 `11→269`、9px 内边距让图标落在 20px、label 落在 42px，和「更多」及导航行完全一致；高度 32px、圆角 `--dsw-radius-md`、悬停色 `--dsw-alias-interactive-bg-hover` 同理（插件显式写出 `width: 100%`、字号与变量回退值）。悬停只用 `background-color` 且和原生一样放进 `@media (hover: hover)`：`background` 简写会把 `background-clip` 重置回 `border-box`，3px inset 就没了——底板会变成 `8→272`，左右各比原生宽 3px；触屏上 `:hover` 也不会粘住。
+- 行首图标是 `icon.svg` 的**单色版**（三条递减的层 + 对勾，`currentColor` 描边，16px），和其他侧栏导航字形同一笔画，不发额外请求。
+- 「当前是哪一套」按**能真正套用的子集**比较：预设里点名的 bundle 如果已从 profile 移除，套用时会被跳过，所以它也参与不了匹配。两套预设化简后相同时，显示 Host 记录的 `applied`（旧文件回退到 `last.name` 的 `before <预设名>`）。
 
 ## 它不做什么
 
@@ -66,7 +77,7 @@ node tests/routes.test.mjs   # 路由级（会起一个临时 HTTP server，不�
 | --- | --- |
 | `index.js` | Host 半体：路由、读写预设文件、驱动 `pluginManager.setBundleEnabled` |
 | `plan.js` | 纯函数：差集规划与名称校验（可单测） |
-| `client.js` | 浏览器半体：Plugins 页的 `plugins.tab` 标签页 |
+| `client.js` | 浏览器半体：Plugins 页的 `plugins.tab` 标签页 + 侧栏底部的快速切换行 |
 | `cordis.patch.yml` | bundle 层，插入 `bundle-presets` 这一行 |
 | `tests/plan.test.mjs` | 纯函数：差集、名称校验、预检拒绝、self 保护 |
 | `tests/routes.test.mjs` | 路由级：真 HTTP + stub 插件管理器，覆盖套用/回滚/撤销快照/预检拒绝/围栏/损坏自愈/并发保存/文件锁 |

@@ -24,6 +24,8 @@ A **preset** is a named list of bundle package names from `dsh.profile.bundles`.
 - **Undo** the last switch; the snapshot is written only when the manifest actually changed.
 - **Overwrite** an existing name only after an explicit confirmation (`409 name-exists` first).
 
+The sidebar foot also carries a **Presets** row (just above Settings): hovering it opens a flyout on the right listing every preset with the active one marked, and one click switches to it. The flyout also offers **Undo last switch** and **Manage presets…**, which opens the Plugins page on its **Presets** tab; clicking the row pins the flyout, `Esc` closes it and returns focus to the row.
+
 Switching goes through `pluginManager.setBundleEnabled()`, so it inherits the profile write lock, version-compatibility checks, HMR recomposition and the plugin manager's protected-bundle refusals. A switch is refused as a whole (`409 unappliable`, with per-bundle reasons) when any step could not run: a bundle whose files are missing or whose patch cannot be read, or a protected bundle that would have to be turned off. A step that already wrote the manifest and then failed to recompose is reverted immediately.
 
 ## Install

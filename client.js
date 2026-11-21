@@ -70,6 +70,11 @@ window.__ModuleLoader__.load({
         missing: '已不在本 profile',
         orderHint: '顺序即层叠顺序：新打开的追加到末尾',
         more: '… 还有 {n} 个',
+        switcher: '插件组合预设',
+        switcherNone: '未匹配',
+        switcherEmpty: '还没有预设，到「插件 › 组合预设」里存一个',
+        switcherLoading: '加载中…',
+        manage: '管理预设…',
       },
       en: {
         tab: 'Presets',
@@ -128,6 +133,11 @@ window.__ModuleLoader__.load({
         missing: 'No longer in this profile',
         orderHint: 'Order is layer order: newly enabled bundles append at the end',
         more: '… {n} more',
+        switcher: 'Presets',
+        switcherNone: 'No match',
+        switcherEmpty: 'No presets yet — save one on Plugins › Presets',
+        switcherLoading: 'Loading…',
+        manage: 'Manage presets…',
       },
     }
 
@@ -165,6 +175,44 @@ window.__ModuleLoader__.load({
         .join(' , ')
     /** Set equality: the manager appends newly enabled bundles, so order cannot be compared. */
     const sameSet = (a, b) => a.length === b.length && a.every(item => b.includes(item))
+
+    /**
+     * The preset name the Host recorded for this selection. Falls back to the
+     * undo snapshot's `before <name>`, which older state files only carry.
+     * @param data `/state` payload, or undefined before the first load
+     * @returns the applied preset name, or null
+     */
+    const appliedPresetName = data => {
+      if (typeof data?.applied === 'string') return data.applied
+      const name = data?.last?.name
+      return typeof name === 'string' && name.startsWith('before ') ? name.slice('before '.length) : null
+    }
+
+    /**
+     * Which preset the running selection is, ignoring bundles this profile can no
+     * longer select: a preset saved before a bundle was removed still names it,
+     * and applying it silently skips that name — so compare what would apply.
+     * @param presets saved presets, any order
+     * @param selected bundle names enabled now
+     * @param bundles the profile's bundle rows from `/state` (undefined before the first load)
+     * @returns the matching preset, or null
+     */
+    const matchPreset = (presets, selected, bundles, preferred) => {
+      const list = Array.isArray(presets) ? presets : []
+      const known = Array.isArray(bundles) ? new Set(bundles.map(bundle => bundle.name)) : null
+      const matches = list.filter(preset => {
+        const target = Array.isArray(preset?.bundles) ? preset.bundles : []
+        return sameSet(selected, known === null ? target : target.filter(name => known.has(name)))
+      })
+      if (matches.length === 0) return null
+      // Two presets can reduce to the same applicable bundles; name the one the
+      // user actually applied.
+      if (typeof preferred === 'string') {
+        const applied = matches.find(preset => preset.name === preferred)
+        if (applied !== undefined) return applied
+      }
+      return matches[0]
+    }
 
     const STYLE_ID = 'dsh-bundle-presets-style'
     const CSS = `
@@ -268,6 +316,26 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** The plugin's own mark — icon.svg, inlined so the sidebar row needs no asset request. */
+    function PluginMark({ size = 16 }) {
+      return h('svg', {
+        width: size,
+        height: size,
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 1.5,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+        'aria-hidden': true,
+      },
+        h('rect', { x: 2.2, y: 2.6, width: 6.4, height: 2.8, rx: 0.9 }),
+        h('rect', { x: 2.2, y: 6.6, width: 9.8, height: 2.8, rx: 0.9 }),
+        h('rect', { x: 2.2, y: 10.6, width: 4.2, height: 2.8, rx: 0.9 }),
+        h('path', { d: 'M8.9 12.1 10.4 13.6 14.2 8.7' }),
+      )
+    }
+
     const ENDPOINT = '/api/bundle-presets'
 
     const REQUEST_TIMEOUT_MS = 60_000
@@ -325,6 +393,456 @@ window.__ModuleLoader__.load({
       return { kind: 'info', text: parts.join(' · ') }
     }
 
+    const SWITCHER_CSS = `
+.dbp-sw { box-sizing: border-box; position: relative; display: flex; flex: 0 0 auto; width: 100%; min-width: 0; order: -1; margin: 0 0 4px 0; }
+.dbp-sw[data-rail] { width: auto; }
+/* The expanded row takes the sidebar's own horizontal geometry
+   (dsh-client-ui-sidebar SidebarRoot.module.css, .panelRow): the column pads
+   8px, the row paints a 3px transparent inset border, so the hover plate runs
+   11px..269px and 9px of padding puts glyphs at 20px and labels at 42px — the
+   same columns the rows above use. Hover stays on background-color and inside
+   @media (hover: hover), as in the shell: the background shorthand resets
+   background-clip to border-box and silently drops that inset. */
+.dbp-sw-row { box-sizing: border-box; display: flex; align-items: center; gap: var(--dsh-sidebar-label-gap, 6px); width: 100%; min-height: 32px; margin: 0; padding: 5px calc(var(--dsh-sidebar-row-padding, 12px) - var(--dsh-sidebar-paint-inset, 3px)); border: 0; border-inline: var(--dsh-sidebar-paint-inset, 3px) solid transparent; border-radius: var(--dsw-radius-md); background: transparent; background-clip: padding-box; color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; line-height: 22px; text-align: left; cursor: pointer; }
+.dbp-sw-row[aria-expanded='true'] { background-color: var(--dsw-alias-interactive-bg-hover); }
+@media (hover: hover) {
+  .dbp-sw-row:hover { background-color: var(--dsw-alias-interactive-bg-hover); }
+}
+.dbp-sw-row:focus-visible { outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: -2px; }
+.dbp-sw-glyph { flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.dbp-sw-label { flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbp-sw-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.dbp-sw[data-rail] .dbp-sw-row { width: 36px; min-height: 36px; padding: 0; border-inline: 0; justify-content: center; }
+.dbp-fly { position: fixed; z-index: 40; box-sizing: border-box; display: flex; flex-direction: column; gap: 1px; width: 264px; max-width: calc(100vw - 16px); padding: 6px; overflow-y: auto; overscroll-behavior: contain; border-radius: var(--dsw-radius-lg); color: var(--dsw-alias-label-primary); background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2)); backdrop-filter: var(--dsw-menu-backdrop-filter); box-shadow: var(--dsw-elevation-panel); font-size: 13px; line-height: 18px; }
+.dbp-fly::-webkit-scrollbar { width: 6px; }
+.dbp-fly::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--dsw-alias-scrollbar-bg-l2); }
+.dbp-fly-head { display: flex; align-items: center; gap: 8px; padding: 2px 6px 4px; }
+.dbp-fly-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-tertiary); }
+.dbp-fly-hint { flex: none; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-tertiary); }
+.dbp-fly-item { box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; margin: 0; padding: 0 8px; border: 0; border-radius: var(--dsw-radius-sm); background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; line-height: 18px; text-align: left; cursor: pointer; }
+.dbp-fly-item:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dbp-fly-item:focus-visible { outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: -1px; }
+.dbp-fly-item:disabled { opacity: .45; cursor: default; }
+.dbp-fly-check { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; color: var(--dsw-alias-brand-primary); }
+.dbp-fly-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbp-fly-trail { flex: none; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-tertiary); }
+.dbp-fly-sep { flex: none; height: var(--dsh-hairline-width, .5px); margin: 4px; background: var(--dsw-alias-border-l3); }
+.dbp-fly-note { padding: 4px 8px 6px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.dbp-fly-error { color: var(--dsw-alias-state-error-primary); }
+.dbp-spin { display: inline-flex; animation: dbp-spin .8s linear infinite; }
+@keyframes dbp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .dbp-spin { animation: none; } }
+`
+
+    /** Stroke glyphs for the sidebar switcher, drawn at any requested size. */
+    const strokeGlyph = paths => function StrokeGlyph({ size = 14 }) {
+      return h('svg', {
+        width: size, height: size, viewBox: '0 0 16 16', fill: 'none',
+        stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round',
+        'aria-hidden': true,
+      }, paths.map((d, index) => h('path', { key: index, d })))
+    }
+    const CheckIcon = strokeGlyph(['M3.4 8.4 6.3 11.2 12.6 4.8'])
+    const UndoIcon = strokeGlyph(['M5.8 3.2 2.8 6.2l3 3', 'M2.8 6.2h6.6a3.6 3.6 0 0 1 0 7.2H6.6'])
+    const ManageIcon = strokeGlyph(['M2.8 5.2h10.4', 'M2.8 10.8h10.4', 'M10.4 3.4v3.6', 'M5.6 9v3.6'])
+
+    function SpinnerIcon({ size = 14 }) {
+      return h('span', { className: 'dbp-spin', 'aria-hidden': true }, h('svg', {
+        width: size, height: size, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
+      }, h('circle', {
+        cx: 8, cy: 8, r: 5.6, stroke: 'currentColor', strokeWidth: 1.6,
+        strokeLinecap: 'round', strokeDasharray: '10 26',
+      })))
+    }
+
+    const HOVER_OPEN_MS = 140
+    const HOVER_CLOSE_MS = 280
+
+    /**
+     * The sidebar's preset switcher: one footer row showing the active bundle
+     * preset, and a flyout that applies another one. On fine pointers hovering
+     * the row opens the flyout after a short delay and leaving both closes it;
+     * a click pins it, moves focus inside, and Escape returns focus to the row.
+     *
+     * The flyout is `position: fixed` inside the row's own subtree (the same
+     * shape the app's own footer panels use): the sidebar column clips its
+     * content, and a fixed box escapes that clip without a body-level portal.
+     */
+    function PresetSwitcher({ wide, t: frameSeat, seat, resolve, onManage }) {
+      const t = typeof frameSeat === 'function' ? frameSeat : seat
+      const tv = (key, vars) => format(t, key, vars)
+      const label = value => (typeof resolve === 'function' ? resolve(value) : text(value))
+      const shownWide = wide !== false
+      const [open, setOpen] = React.useState(false)
+      const [pinned, setPinned] = React.useState(false)
+      const [state, setState] = React.useState({ status: 'idle', data: null, error: null })
+      const [busy, setBusy] = React.useState(null)
+      const [notice, setNotice] = React.useState(null)
+      const [active, setActive] = React.useState(-1)
+      const [pos, setPos] = React.useState(null)
+      const rootRef = React.useRef(null)
+      const rowRef = React.useRef(null)
+      const panelRef = React.useRef(null)
+      const openRef = React.useRef(false)
+      const pinnedRef = React.useRef(false)
+      const timers = React.useRef({ open: 0, close: 0 })
+      const alive = React.useRef(true)
+
+      React.useEffect(() => {
+        alive.current = true
+        return () => { alive.current = false }
+      }, [])
+      React.useEffect(() => { openRef.current = open }, [open])
+      React.useEffect(() => { pinnedRef.current = pinned }, [pinned])
+      React.useEffect(() => () => {
+        window.clearTimeout(timers.current.open)
+        window.clearTimeout(timers.current.close)
+      }, [])
+
+      const load = React.useCallback(async () => {
+        try {
+          const data = await request('/state')
+          if (!alive.current) return
+          setState({ status: 'ready', data, error: null })
+        } catch (error) {
+          if (!alive.current) return
+          setState(previous => ({
+            status: previous.data === null ? 'error' : 'ready',
+            data: previous.data,
+            error: error?.message ?? 'error',
+          }))
+        }
+      }, [])
+
+      React.useEffect(() => { if (open) load() }, [open, load])
+
+      const data = state.data
+      const presets = Array.isArray(data?.presets) ? data.presets : []
+      const selected = Array.isArray(data?.selected) ? data.selected : []
+      const current = matchPreset(presets, selected, data?.bundles, appliedPresetName(data))
+      const currentLabel = current === null ? tv('switcherNone') : current.name
+      const canUndo = data !== null && data !== undefined && data.last !== null && data.last !== undefined
+
+      const items = []
+      presets.forEach(preset => {
+        const bundles = Array.isArray(preset.bundles) ? preset.bundles : []
+        items.push({
+          id: `preset:${preset.name}`,
+          kind: 'preset',
+          preset,
+          label: preset.name,
+          current: current !== null && current.name === preset.name,
+          count: bundles.length,
+          disabled: busy !== null,
+        })
+      })
+      items.push({ id: 'undo', kind: 'undo', label: t('undo'), disabled: busy !== null || !canUndo })
+      items.push({ id: 'manage', kind: 'manage', label: t('manage'), disabled: busy !== null })
+      const enabled = items.map((item, index) => (item.disabled ? -1 : index)).filter(index => index >= 0)
+      const firstEnabled = enabled.length > 0 ? enabled[0] : -1
+
+      const clearTimers = () => {
+        window.clearTimeout(timers.current.open)
+        window.clearTimeout(timers.current.close)
+        timers.current.open = 0
+        timers.current.close = 0
+      }
+      const closeNow = () => {
+        clearTimers()
+        setPinned(false)
+        setOpen(false)
+        setActive(-1)
+        setNotice(null)
+      }
+      const openNow = (pin, focusIndex = -1) => {
+        clearTimers()
+        setState(previous => (previous.data === null ? { status: 'loading', data: null, error: null } : previous))
+        setPinned(pin)
+        setOpen(true)
+        setActive(focusIndex)
+      }
+      const hoverFine = () => typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(hover: hover) and (pointer: fine)').matches
+      const armOpen = () => {
+        if (!hoverFine() || openRef.current) return
+        window.clearTimeout(timers.current.close)
+        timers.current.close = 0
+        if (timers.current.open !== 0) return
+        timers.current.open = window.setTimeout(() => {
+          timers.current.open = 0
+          if (!openRef.current) openNow(false)
+        }, HOVER_OPEN_MS)
+      }
+      const armClose = () => {
+        window.clearTimeout(timers.current.open)
+        timers.current.open = 0
+        if (!openRef.current || pinnedRef.current) return
+        if (timers.current.close !== 0) return
+        timers.current.close = window.setTimeout(() => {
+          timers.current.close = 0
+          if (openRef.current && !pinnedRef.current) {
+            setOpen(false)
+            setActive(-1)
+          }
+        }, HOVER_CLOSE_MS)
+      }
+
+      React.useLayoutEffect(() => {
+        if (!open) {
+          setPos(null)
+          return
+        }
+        const place = () => {
+          const row = rowRef.current
+          const panel = panelRef.current
+          if (row === null) return
+          const rect = row.getBoundingClientRect()
+          const width = Math.min(264, Math.max(160, window.innerWidth - 16))
+          const height = panel === null ? 240 : Math.min(panel.offsetHeight, window.innerHeight - 16)
+          const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8))
+          const roomAbove = rect.top - 8
+          const next = roomAbove >= Math.min(height, 200)
+            ? { left, width, bottom: Math.max(8, window.innerHeight - rect.top + 4), maxHeight: roomAbove, top: undefined }
+            : { left, width, top: Math.min(rect.bottom + 4, Math.max(8, window.innerHeight - 8 - height)), maxHeight: window.innerHeight - rect.bottom - 12, bottom: undefined }
+          setPos(previous => (previous !== null
+            && previous.left === next.left
+            && previous.width === next.width
+            && previous.top === next.top
+            && previous.bottom === next.bottom
+            && previous.maxHeight === next.maxHeight
+            ? previous
+            : next))
+        }
+        place()
+        window.addEventListener('resize', place)
+        window.addEventListener('scroll', place, true)
+        return () => {
+          window.removeEventListener('resize', place)
+          window.removeEventListener('scroll', place, true)
+        }
+      }, [open, state.status, busy, notice, data, active])
+
+      React.useEffect(() => {
+        if (!open) return
+        const onPointerDown = event => {
+          if (rootRef.current !== null && rootRef.current.contains(event.target)) return
+          closeNow()
+        }
+        // Hover can open the flyout without moving focus into it, so Escape has
+        // to work from anywhere while it is open.
+        const onKeyDown = event => {
+          if (event.key !== 'Escape') return
+          event.preventDefault()
+          closeNow()
+          if (rowRef.current !== null && rootRef.current !== null && !rootRef.current.contains(document.activeElement)) {
+            rowRef.current.focus({ preventScroll: true })
+          }
+        }
+        document.addEventListener('pointerdown', onPointerDown, true)
+        document.addEventListener('keydown', onKeyDown, true)
+        return () => {
+          document.removeEventListener('pointerdown', onPointerDown, true)
+          document.removeEventListener('keydown', onKeyDown, true)
+        }
+      }, [open])
+
+      React.useEffect(() => {
+        if (!open || active < 0) return
+        const node = panelRef.current === null ? null : panelRef.current.querySelector(`[data-item-index='${active}']`)
+        if (node !== null) node.focus({ preventScroll: true })
+      }, [open, active])
+
+      const run = async (action, key) => {
+        if (busy !== null) return
+        setBusy(key)
+        setNotice(null)
+        try {
+          const outcome = await action()
+          if (!alive.current) return
+          setNotice(summary(outcome, tv))
+          await load()
+        } catch (error) {
+          if (!alive.current) return
+          setNotice({ kind: 'error', text: `${tv('failed')}: ${error?.payload?.error ?? error?.message ?? 'error'}` })
+        } finally {
+          if (alive.current) setBusy(null)
+        }
+      }
+      const applyPreset = preset => run(
+        () => request('/apply', { method: 'POST', body: JSON.stringify({ name: preset.name }) }),
+        preset.name,
+      )
+      const undoSwitch = () => run(() => request('/undo', { method: 'POST', body: '{}' }), 'undo')
+
+      const onRowClick = () => {
+        if (openRef.current && pinnedRef.current) {
+          closeNow()
+          return
+        }
+        openNow(true, firstEnabled)
+      }
+      const onRowKeyDown = event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+          event.preventDefault()
+          openNow(true, firstEnabled)
+          return
+        }
+        if (event.key === 'Escape' && openRef.current) {
+          event.preventDefault()
+          closeNow()
+        }
+      }
+      const onPanelKeyDown = event => {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+          closeNow()
+          if (rowRef.current !== null) rowRef.current.focus({ preventScroll: true })
+          return
+        }
+        if (event.key === 'Tab') {
+          closeNow()
+          return
+        }
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return
+        event.preventDefault()
+        if (enabled.length === 0) return
+        if (event.key === 'Home') {
+          setActive(enabled[0])
+          return
+        }
+        if (event.key === 'End') {
+          setActive(enabled[enabled.length - 1])
+          return
+        }
+        const step = event.key === 'ArrowDown' ? 1 : -1
+        const at = enabled.indexOf(active)
+        setActive(at === -1
+          ? (step === 1 ? enabled[0] : enabled[enabled.length - 1])
+          : enabled[(at + step + enabled.length) % enabled.length])
+      }
+
+      const flyoutStyle = pos === null
+        ? { left: 8, top: 0, visibility: 'hidden' }
+        : {
+            left: `${pos.left}px`,
+            width: `${pos.width}px`,
+            maxHeight: `${Math.max(80, pos.maxHeight)}px`,
+            ...(pos.top === undefined ? { bottom: `${pos.bottom}px` } : { top: `${pos.top}px` }),
+          }
+
+      const presetRows = items.map((item, index) => {
+        if (item.kind !== 'preset') return null
+        return h('button', {
+          key: item.id,
+          type: 'button',
+          role: 'menuitemradio',
+          'aria-checked': item.current,
+          'data-item-index': index,
+          tabIndex: index === active ? 0 : -1,
+          disabled: item.disabled,
+          className: 'dbp-fly-item',
+          onClick: () => applyPreset(item.preset),
+        },
+          h('span', { className: 'dbp-fly-check' }, item.current ? h(CheckIcon, { size: 14 }) : null),
+          h('span', { className: 'dbp-fly-label' }, label(item.label)),
+          busy === item.preset.name
+            ? h('span', { className: 'dbp-fly-trail' }, h(SpinnerIcon, { size: 12 }))
+            : h('span', { className: 'dbp-fly-trail' }, tv('count', { n: item.count })),
+        )
+      })
+
+      const actionRows = items.map((item, index) => {
+        if (item.kind === 'preset') return null
+        const icon = item.kind === 'undo' ? h(UndoIcon, { size: 14 }) : h(ManageIcon, { size: 14 })
+        const trail = item.kind === 'undo' && busy === 'undo' ? h(SpinnerIcon, { size: 12 }) : null
+        return h('button', {
+          key: item.id,
+          type: 'button',
+          role: 'menuitem',
+          'data-item-index': index,
+          tabIndex: index === active ? 0 : -1,
+          disabled: item.disabled,
+          className: 'dbp-fly-item',
+          onClick: () => {
+            if (item.kind === 'undo') {
+              undoSwitch()
+              return
+            }
+            closeNow()
+            onManage()
+          },
+        },
+          h('span', { className: 'dbp-fly-check' }, icon),
+          h('span', { className: 'dbp-fly-label' }, label(item.label)),
+          trail === null ? null : h('span', { className: 'dbp-fly-trail' }, trail),
+        )
+      })
+
+      const body = []
+      if (state.status === 'error' && data === null) {
+        body.push(h('div', { key: 'error', className: 'dbp-fly-note dbp-fly-error' }, `${t('failed')}: ${state.error}`))
+      } else if (presets.length === 0) {
+        body.push(h('div', { key: 'empty', className: 'dbp-fly-note' }, state.status === 'ready' || state.status === 'error' ? t('switcherEmpty') : t('switcherLoading')))
+      } else {
+        body.push(...presetRows)
+      }
+      body.push(h('div', { key: 'sep', className: 'dbp-fly-sep', role: 'separator' }))
+      body.push(...actionRows)
+      if (notice !== null) {
+        body.push(h('div', {
+          key: 'notice',
+          className: notice.kind === 'error' ? 'dbp-fly-note dbp-fly-error' : 'dbp-fly-note',
+          role: 'status',
+        }, notice.text))
+      }
+
+      return h('div', {
+        ref: rootRef,
+        className: 'dbp-sw',
+        'data-rail': shownWide ? undefined : true,
+        onPointerEnter: armOpen,
+        onPointerLeave: armClose,
+      },
+        h('style', { id: 'dsh-bundle-presets-switcher-style' }, SWITCHER_CSS),
+        h('button', {
+          ref: rowRef,
+          type: 'button',
+          className: 'dbp-sw-row',
+          'aria-haspopup': 'menu',
+          'aria-expanded': open,
+          'aria-label': `${t('switcher')} · ${currentLabel}`,
+          title: `${t('switcher')} · ${currentLabel}`,
+          onClick: onRowClick,
+          onKeyDown: onRowKeyDown,
+        },
+          h('span', { className: 'dbp-sw-glyph' }, h(PluginMark, { size: shownWide ? 16 : 18 })),
+          shownWide ? h('span', { className: 'dbp-sw-label' }, t('switcher')) : null,
+          shownWide ? h('span', { className: 'dbp-sw-value' }, currentLabel) : null,
+        ),
+        open ? h('div', {
+          ref: panelRef,
+          className: 'dbp-fly',
+          role: 'menu',
+          'aria-label': t('switcher'),
+          style: flyoutStyle,
+          onPointerEnter: () => {
+            window.clearTimeout(timers.current.close)
+            timers.current.close = 0
+          },
+          onPointerLeave: armClose,
+          onKeyDown: onPanelKeyDown,
+        },
+          h('div', { className: 'dbp-fly-head' },
+            h('span', { className: 'dbp-fly-title' }, t('switcher')),
+            h('span', { className: 'dbp-fly-hint' }, tv('count', { n: selected.length })),
+          ),
+          ...body,
+        ) : null,
+      )
+    }
+
     function PresetsPanel({ t: frameSeat, seat, resolve }) {
       /** The frame's seat re-renders on a language switch; ours is the fallback. */
       const t = typeof frameSeat === 'function' ? frameSeat : typeof seat === 'function' ? seat : fallbackT
@@ -362,6 +880,7 @@ window.__ModuleLoader__.load({
       const allBundles = data?.bundles ?? []
       const presets = [...(data?.presets ?? [])].sort((left, right) => String(right.savedAt).localeCompare(String(left.savedAt)))
       const last = data?.last ?? null
+      const currentPresetName = matchPreset(presets, selected, data?.bundles, appliedPresetName(data))?.name ?? null
 
       const run = async (key, task) => {
         if (busy !== null) return
@@ -607,7 +1126,7 @@ window.__ModuleLoader__.load({
           presets.length === 0
             ? h('p', { className: 'dbp-hint' }, t('empty'))
             : presets.map(preset => {
-              const isCurrent = sameSet(selected, preset.bundles ?? [])
+              const isCurrent = currentPresetName === preset.name
               const isEditing = editing?.name === preset.name
               return h('div', { key: preset.name, className: 'dbp-card' },
                 h('div', { className: 'dbp-card-head' },
@@ -712,7 +1231,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'layout'],
       apply(ctx) {
         const locale = ctx.get('locale')
         if (typeof locale?.register === 'function') {
@@ -739,7 +1258,49 @@ window.__ModuleLoader__.load({
           order: 5,
           label: () => seat('tab'),
           locale: 'dshBundlePresets',
-        }, (ownerProps = {}) => h(PresetsPanel, { ...ownerProps, seat, resolve })));
+        }, (ownerProps = {}) => h(PresetsPanel, { ...ownerProps, seat, resolve })))
+        // The foot of the sidebar already reserves one row above Settings, and
+        // its owner hands each action only the column state; the row and its
+        // flyout are ours to draw.
+        const layout = ctx.get('layout')
+        /**
+         * Open the Plugins page on our contributed tab. The page owns its tab
+         * selection and only exposes `openList` / `openBundle` (both force the
+         * Installed tab), so land on the list first and then select the tab
+         * button the page renders for this registration. If it never appears
+         * (a page that changed its tab markup), fall back to our own panel.
+         */
+        const onManage = () => {
+          try {
+            const navigation = ctx.get('pluginNavigation')
+            if (typeof navigation?.openList === 'function') navigation.openList()
+            else layout?.selectPanel?.('plugins')
+          } catch (error) {
+            console.warn('dsh-bundle-presets: cannot open the Plugins page', error)
+          }
+          let frames = 0
+          const selectTab = () => {
+            const button = document.querySelector('[role="tab"][id$="-bundle-presets"]')
+              ?? document.querySelector('[id$="-bundle-presets"][role]')
+            if (button !== null) {
+              button.click()
+              return
+            }
+            if (++frames > 40) {
+              console.warn('dsh-bundle-presets: the Plugins page did not render the Presets tab')
+              return
+            }
+            window.requestAnimationFrame(selectTab)
+          }
+          window.requestAnimationFrame(selectTab)
+        }
+        ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+          name: 'sidebar.footer.action',
+          id: 'bundle-presets',
+          order: 20,
+          label: () => seat('switcher'),
+          locale: 'dshBundlePresets',
+        }, (ownerProps = {}) => h(PresetSwitcher, { ...ownerProps, seat, resolve, onManage })));
       },
     }
   },
